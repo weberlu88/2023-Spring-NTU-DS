@@ -1,0 +1,29 @@
+services:
+  # The api service definition
+  py_server:
+    build: .
+    ports:
+      - 5000:5000
+    working_dir: /app
+    command: sh -c "flask run" # && python server.py
+    # volumes:
+    #   - ./:/app
+    # environment:
+    #   MYSQL_HOST: mysql
+    #   MYSQL_USER: root
+    #   MYSQL_PASSWORD: secret
+    #   MYSQL_DB: todos
+
+  # # The request client definition
+  py_client:
+    build: .
+    working_dir: /app
+    # command: sh -c "python /client/client.py"
+#     volumes:
+#       - todo-mysql-data:/var/lib/mysql
+#     environment: 
+#       MYSQL_ROOT_PASSWORD: secret
+#       MYSQL_DATABASE: todos
+
+# volumes:
+#   todo-mysql-data:
