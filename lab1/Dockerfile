@@ -12,7 +12,7 @@ RUN pip install flask requests
 
 EXPOSE 5000
 
-CMD "python client/client.py" 
+# CMD "python client/client.py" 
 # 怎麼不執行這行 QQ
     
 # CMD ["flask", "run"] # ok
