@@ -1,0 +1,3 @@
+若時間不夠，只須看8.2 Yo-Yo 部分
+
+1. Design and Analysis of Distributed Algorithms, Chap. 3, Election: 8.2. YoYo,連結到外部網站。 Nicola Santoro, 2006.
