@@ -76,29 +76,31 @@ def killall_running_nodes():
 		# Kill each process in the list
 		for pid in processes:
 			subprocess.run(["kill", pid])
-			
+		time.sleep(0.01)
 		print(f"info: Killed {len(processes)} chord processes.")
 	except:
 		print("info: no runnung chord processes.")
 
 killall_running_nodes()
 try:
-	
 	time.sleep(0.1)
 	cmd_str = "./chord 127.0.0.1 5057 & ./chord 127.0.0.1 5058 & ./chord 127.0.0.1 5059 &\
 			   ./chord 127.0.0.1 5060 & ./chord 127.0.0.1 5061 & ./chord 127.0.0.1 5062 &\
-			   ./chord 127.0.0.1 5063 & ./chord 127.0.0.1 5064"
+			   ./chord 127.0.0.1 5063 & ./chord 127.0.0.1 5064 &"
 	subprocess.run(cmd_str, shell=True)
-	time.sleep(0.1)
+	time.sleep(2)
 	print("deploy chrod node ok")
 except:
 	print("info: start nodes error")
 
 print("start create")
+
+
+print("start join")
+
 create(5057)
 wait(t)
 
-print("start join")
 join(5059, 5057)
 wait(t)
 join(5060, 5057)
@@ -107,8 +109,7 @@ join(5063, 5059)
 wait(10 * t)
 
 stride = (1 << 32) // 128
-# testcases = [3, 14, 35, 46, 65, 70, 73, 88, 91, 102, 112, 123]
-testcases = [3, 14, 35]
+testcases = [3, 14, 35, 46, 65, 70, 73, 88, 91, 102, 112, 123]
 
 for case in testcases:
 	id = stride * case
@@ -127,8 +128,7 @@ join(5058, 5062)
 wait(t)
 
 stride = (1 << 32) // 128
-# testcases = [10, 8, 35, 73, 65, 112, 79, 90, 45, 61, 33, 100]
-testcases = [10, 8, 35]
+testcases = [10, 8, 35, 73, 65, 112, 79, 90, 45, 61, 33, 100]
 
 for case in testcases:
 	id = stride * case
@@ -144,3 +144,4 @@ else:
 	print("{} incorrect response(s).".format(incorrect))
 
 print("Do not forget to terminate your Chord nodes!")
+killall_running_nodes()

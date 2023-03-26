@@ -4,21 +4,57 @@
 #include "chord.h"
 #include "rpc/client.h"
 
-#include <cmath>
 #include <iostream>
 #include <cstdint>
+#include <vector>
 
 Node self, successor, predecessor;
-bool hasError = false;
+Node finger_table[4];
+// Node successor_list[3];
+std::vector<Node> successor_list(3);
 
 Node get_info() { return self; } // Do not modify this line.
+Node get_predecessor() { return predecessor; }
+// Node get_successor() { return successor; }
+// Node* get_finger_table() { return finger_table; }
+std::vector<Node> get_successor_list() { return successor_list; }
 
-/** 
- * takes three arguments (x, a, and b) 
- * returns true if x is between a and b (exclusive) and false otherwise (不包含頭尾)
- */
-bool isBetween(uint64_t x, uint64_t a, uint64_t b) {
-  return x > a && x < b;
+void create() {
+  predecessor.ip = "";
+  successor = self;
+  successor_list[0] = self;
+}
+
+void change_predecessor(Node n) {
+  predecessor = n;
+}
+
+// void change_successor(Node n) {
+//   successor = n;
+// }
+
+void join(Node n) { // n is a known node on Chrod ring
+  predecessor.ip = "";
+
+  try {
+    rpc::client client(n.ip, n.port); // get the known node instance
+    successor = client.call("find_successor", self.id).as<Node>(); // use the known node to find the successor by new node id
+    
+    std::vector<Node> new_successor_list = client.call("get_successor_list").as<std::vector<Node>>();
+
+    successor_list[0] = successor;
+    successor_list[1] = new_successor_list[0];
+    successor_list[2] = new_successor_list[1];
+
+    // std::cout << "Node:" << self.id << "\n";
+    // std::cout << "     Su list 0:" << successor_list[0].id  << "\n";
+    // std::cout << "     Su list 1:" << successor_list[1].id  << "\n";
+    // std::cout << "     Su list 2:" << successor_list[2].id  << "\n";
+
+  } catch (std::exception &e) {
+    // std::cout << "join err" << "\n";
+  }
+
 }
 
 bool inCloseRange(uint64_t id, uint64_t predecessor_id, uint64_t successor_id){
@@ -53,87 +89,120 @@ bool inOpenRange(uint64_t id, uint64_t predecessor_id, uint64_t successor_id){
   }
 }
 
-void create() {
-  predecessor.ip = "";
-  successor = self;
+uint64_t add_id(uint64_t id_1, uint64_t id_2) {
+  return (id_1 + id_2) & ((1UL << 32) - 1);
 }
 
+Node closest_preceding_node (uint64_t id) {
+  for ( int i = 3; i >= 0; i-- ) {
+    
+    // if (self.id == 373792412 && id == 100663296) {
+    //   std::cout << "ID:" << id << "\n";
+    //   std::cout << "Finger id:" << finger_table[i].id << "\n";
+    //   std::cout << "Self id:" << self.id << "\n";
+    // }    
 
-void join(Node n) {
-  predecessor.ip = "";
-  rpc::client client(n.ip, n.port);
-  successor = client.call("find_successor", self.id).as<Node>();
-  std::cout << self.id << " join(), successor is "<< successor.id << std::endl;
+    if ( inOpenRange(finger_table[i].id, self.id, id) ) {
+      if (finger_table[i].id != 0 && finger_table[i].id != self.id){
+
+        return finger_table[i];
+      } 
+    }
+  }
+
+  return self;
 }
 
-/**
- * Ask node n to find the successor of id
-*/
-// Node find_successor(uint64_t id) {
-//   // successor (繼任) 我下一個Node是誰
-//   // TODO: implement your `find_successor` RPC
-//   std::cout << self.id << " find_successor(), to find "<< id << std::endl;
-//   if (successor.id == self.id){ // 網路中只有自己時，return 自己
-//     std::cout << self.id << " i'm successor of "<< id << std::endl;
-//     return self;
-//   }
-//   if (isBetween(id, self.id, successor.id) || id == successor.id) { // 繼任者剛好負責這個 id, return
-//     std::cout << self.id << " i'm successor of "<< id << std::endl;
-//     return successor;
-//   }
-//   else { // 繼任者不是，遞迴呼叫
-//     rpc::client s(successor.ip, successor.port); 
-//     return s.call("find_successor", id).as<Node>();
-//   }
-// }
+/* finger table version */
 Node find_successor(uint64_t id) {
   // TODO: implement your `find_successor` RPC
+  Node closest_node;
   try {
 
-    // if ( self.id == successor.id ){ // only one node
-
-    //   return successor;
     if ( inCloseRange(id, self.id, successor.id) ){
-      return successor;
-    } else {
-      // Node closest_node = closest_preceding_node(id);
-      // rpc::client client(closest_node.ip, closest_node.port); 
-      // return client.call("find_successor", id).as<Node>();
+      // std::cout << "Node:" << self.id << ": Direct Return \n";
 
-      rpc::client client(successor.ip, successor.port); 
-      return client.call("find_successor", id).as<Node>();
+      return successor;
+
+    } else {
+ 
+      closest_node = closest_preceding_node(id);
+      if (closest_node.id == self.id) {
+
+        return self;
+      } else {
+        rpc::client client(closest_node.ip, closest_node.port); 
+        return client.call("find_successor", id).as<Node>();
+      }
     }
 
   } catch (std::exception &e) {
-    successor.ip = "";
-    std::cout << "find_successor err" << "\n" ;
+    // Handling Fail
+    // std::cout << "Node:" << self.id << ":find_successor err" << "\n" ;
+    // std::cout << "     Close Node:" << closest_node.id << "\n" ;
+
+
   }
   return self;
 }
 
-void check_predecessor() {
-  // predecessor (前任) 我上一個Node是誰
-  // 如果指向我的Node失聯，清空ip，標示他已下線
+uint64_t next = 0;
+void fix_fingers(){
   try {
-    rpc::client client(predecessor.ip, predecessor.port);
-    Node n = client.call("get_info").as<Node>();
+    if (next >= 4){
+      next = 0;
+    }
+
+    if (next != 0){
+      finger_table[next] = find_successor( add_id(self.id, (1ULL << (28+next)) ) );
+    } else {
+      finger_table[next] = successor;
+    }
+
+    // std::cout << "Node:" << self.id << "\n";
+    // std::cout << "        Finger " << next << " ID:" << add_id(self.id, (1ULL << (28+next)) ) << "\n";
+    // std::cout << "        Finger " << next << " Node:" << finger_table[next].id << "\n";
+    
+    next = next + 1;
   } catch (std::exception &e) {
-    predecessor.ip = "";
+    // std::cout << "fix_fingers err" << "\n" ;
+  } 
+}
+
+void update_finger_table(Node died_node, Node new_node){
+  for (int i=0; i<=3; i++){
+    if (died_node.id == finger_table[i].id) {
+      finger_table[i] = new_node;
+    }
   }
 }
 
-/**
- * stabilize() 檢查我和繼任者中間是否被插隊，有則換掉我的繼任者為n'，並通知繼任者n'。
-*/
+void update_successor_list(Node su_node) {
+  successor_list[0] = su_node;
+
+  rpc::client client(successor.ip, successor.port); 
+  std::vector<Node> new_successor_list = client.call("get_successor_list").as<std::vector<Node>>();
+
+  successor_list[1] = new_successor_list[0];
+  successor_list[2] = new_successor_list[1];
+
+}
+
 void stablize(){
+
   try {
 
     Node pre_node;
-    // std::cout << "stablize:" << self.port << ":" << successor.port << "\n";
+    // uint64_t temp_su_id = successor.id;
+    // std::cout << "Node:" << self.id << "\n";
+    // std::cout << "    temp id:" << temp_su_id << "\n";
+
     if ( successor.id != 0 && self.id != successor.id ) {
+
       rpc::client client(successor.ip, successor.port); 
-      pre_node = client.call("get_predecessor").as<Node>();     
-    } else {
+      pre_node = client.call("get_predecessor").as<Node>();
+
+    } else { // when only have root node [self.id == successor.id]
       pre_node = predecessor;
       // std::cout << "IN sta:" << pre_node.id << "\n";
     }
@@ -142,84 +211,166 @@ void stablize(){
 
       if ( inOpenRange(pre_node.id, self.id, successor.id) ) {
         successor = pre_node;
+        // std::cout << "    change id:" << successor.id << "\n";
       } 
     } 
     
     if ( successor.id != 0 && self.id != successor.id) {
-      std::cout << "Notify Node  :" << successor.port << "\n";
+      // if (temp_su_id != successor.id) { // if successor change, tell it to change predecessor
+
+      // std::cout << "Node:" << self.id << " Port: " << self.port << "\n";
+      // std::cout << "    Out Self id:" << self.id << " Successor id: " << successor.id << "\n";
       rpc::client client2(successor.ip, successor.port);
+
+      // std::cout << "Notify Node  :" << successor.port << "\n";
       client2.call("notify", self);   
+
+      update_successor_list(successor);
+      // }
+    }
+  } catch (std::exception &e) {
+
+    // std::cout << "stablize Err \n";
+    if (successor.id == successor_list[0].id) { // fail to find the successor.predecessor
+      // std::cout << "Node:" << self.id << " Port: " << self.port << "\n";
+      // std::cout << "    stablize Err" << ":successor.id == successor_list[0].id" << "\n";
+
+      try {
+
+        if (successor_list[1].id != self.id) {
+          rpc::client client3(successor_list[1].ip, successor_list[1].port);
+          std::vector<Node> new_successor_list = client3.call("get_successor_list").as<std::vector<Node>>();
+
+          // std::cout << "Node:" << self.id << " Port: " << self.port << "\n";
+          // std::cout << "    stablize Err" << ":catch 1 successor port:" << successor_list[1].port << "\n";
+          
+          /*update successor, successor_list, finger_table*/
+          update_finger_table(successor_list[0], successor_list[1]);
+          
+          successor = successor_list[1];
+          successor_list[0] = successor_list[1];
+          successor_list[1] = new_successor_list[0];
+          successor_list[2] = new_successor_list[1];
+
+          // std::cout << "Node:" << self.id << " Port: " << self.port << "\n";
+          // std::cout << "    Self id:" << self.id << " Successor id: " << successor.id << "\n";
+        } else { // successor == self, so only exit one node
+
+
+          finger_table[0] = self;
+          finger_table[1] = self;
+          finger_table[2] = self;
+          finger_table[3] = self;
+
+          successor = self;
+          Node temp_node{};
+          predecessor = temp_node;
+          successor_list[0] = self;
+          successor_list[1] = self;
+          successor_list[2] = self;
+
+          // std::cout << "Node:" << self.id << " Port: " << self.port << "\n";
+          // std::cout << "    In Self id:" << self.id << " Successor id: " << successor.id << "\n";
+        }
+        
+
+
+      } catch (std::exception &e) {
+        // std::cout << "Node:" << self.id << " Port:" << self.port << "\n";
+        // std::cout << "    stablize Err" << "catch 1 fail successor port: " <<  successor_list[1].port <<  "\n";
+        try {
+          if (successor_list[1].id != self.id) {
+            rpc::client client4(successor_list[2].ip, successor_list[2].port);
+            std::vector<Node> new_successor_list = client4.call("get_successor_list").as<std::vector<Node>>();
+            
+            update_finger_table(successor_list[0], successor_list[2]);
+            update_finger_table(successor_list[1], successor_list[2]);
+
+            successor = successor_list[2];
+            successor_list[0] =  successor_list[2];
+            successor_list[1] = new_successor_list[0];
+            successor_list[2] = new_successor_list[1];          
+          } else { // successor == self, so only exit one node
+            finger_table[0] = self;
+            finger_table[1] = self;
+            finger_table[2] = self;
+            finger_table[3] = self;
+
+            successor = self;
+            Node temp_node{};
+            predecessor = temp_node;
+            successor_list[0] = self;
+            successor_list[1] = self;
+            successor_list[2] = self;
+          }
+
+
+        } catch (std::exception &e) {
+          // std::cout << "Node:" << self.id << " Port:" << self.port << "\n";
+          // std::cout << "    stablize Err" << "catch 2 fail successor port: " <<  successor_list[2].port <<  "\n";
+          // std::cout << "Three node die in a row" << "\n";
+        }
+      }
+
+    } else { // after changing the successor to successor.predecessor, successor.predecessor is died
+      
+      // because successor.predecessor is died, we no need to change successor, but need to restore successor
+      successor = successor_list[0];
+      Node temp_node{};
+
+      rpc::client client5(successor.ip, successor.port);
+      client5.call("change_predecessor", temp_node); // tell the successor its predecessor is died
+      // std::cout << "Node:" << self.id << " Port:" << self.port << "\n";
+      // std::cout << "    stablize Err" << ":no notify to change successor" << "\n";
     }
 
-  } catch (std::exception &e) {
-    // std::cout << &e. << "\n" ;
-    if (!hasError){
-      hasError = true;
-      std::cout << "stablize Err at " << self.id << "\n";
-      std::cerr << e.what() << std::endl;
-    }
+
   }
 
 }
-  // std::cout << "stablize: enter " << self.id << std::endl;
-  // if ( successor.id && self.id != successor.id ){
-  //   // try {
-  //     // get successor.predecessor (沒被插隊的話，會是我自己)
-  //     std::cout << "stablize: call get_predecessor "  << self.id << std::endl;
-  //     rpc::client *s;
-  //     s = new rpc::client(successor.ip, successor.port); 
-  //     Node candidate_s = s->call("get_predecessor").as<Node>();
-  //     std::cout << "stablize: get predecessor OK " << self.id << std::endl;
 
-  //     // check 是否被別人插隊，如果有則插隊的人是我的新 successor
-  //     // if (s <- p <- n), p is my new successor
-  //     if ( candidate_s.id && isBetween(candidate_s.id, self.id, successor.id) ){
-  //       successor = candidate_s;
-  //       delete s;
-  //       std::cout << "stablize: delete OK" << std::endl;
-  //       s = new rpc::client(successor.ip, successor.port);
-  //     }
-
-  //     // notify successor that i'm yours predecessor
-  //     s->call("notify", self);
-  //   // } catch (std::exception &e) {
-  //   //   if (!hasError){
-  //   //     std::cout << "chord stablize Err at " << self.id << "\n";
-  //   //     hasError = true;
-  //   //   }
-  //   // }
-  // }
-
-/**
- * Only called by predecessor. Node `notifier` thinks he is might be my predecessor.
- * If notifier's id is smaller then my current predecessor, change to `notifier`.
-*/
 void notify(Node n){
+  // std::cout << "In notify  :" << self.port << "\n";
+  // std::cout << "In notify  :" << predecessor.ip << "\n";
+
   if ( predecessor.ip == "" || inOpenRange(n.id, predecessor.id, self.id) ) {
     predecessor = n;
     // std::cout << "notify()" << "\n" ;
   }
 
 }
-// void notify(Node notifier) {
-//   rpc::client s(successor.ip, successor.port);
-//   if ( predecessor.ip == "" || isBetween(notifier.id, predecessor.id, self.id) ) {
-//     predecessor = notifier;
-//     std::cout << self.id << ": was notify(), change predecessor to"<< notifier.id << std::endl;
-//   }
-// }
+
+void check_predecessor() {
+  try {
+    rpc::client client(predecessor.ip, predecessor.port);
+    Node n = client.call("get_info").as<Node>();
+  } catch (std::exception &e) {
+    predecessor.ip = "";
+    // std::cout << "check_predecessor Err \n";
+  }
+}
 
 void register_rpcs() {
   add_rpc("get_info", &get_info); // Do not modify this line.
+
+  add_rpc("get_predecessor", &get_predecessor); 
+  add_rpc("change_predecessor", &change_predecessor);
+  // add_rpc("get_successor", &get_successor);
+  // add_rpc("change_successor", &change_successor);
+  add_rpc("notify", &notify);
+  add_rpc("get_successor_list", &get_successor_list);
+
+  // add_rpc("get_finger_table", &get_finger_table);
+
   add_rpc("create", &create);
   add_rpc("join", &join);
   add_rpc("find_successor", &find_successor);
-  add_rpc("notify", &notify);
 }
 
 void register_periodics() {
   add_periodic(check_predecessor);
   add_periodic(stablize);
+  add_periodic(fix_fingers);
 }
 
 #endif /* RPCS_H */
