@@ -8,7 +8,7 @@ ids = []
 find_successor_req = 0
 incorrect = 0
 t = 2
-t = 0.11
+t = 0.12
 
 def add_id(id):
 	if id not in ids:
@@ -94,13 +94,10 @@ except:
 	print("info: start nodes error")
 
 print("start create")
-
-
-print("start join")
-
 create(5057)
 wait(t)
 
+print("start join")
 join(5059, 5057)
 wait(t)
 join(5060, 5057)

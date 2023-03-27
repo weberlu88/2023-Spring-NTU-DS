@@ -10,56 +10,21 @@
 
 Node self, successor, predecessor;
 Node finger_table[4];
+// Node successor_list[3];
 std::vector<Node> successor_list(3);
 
 Node get_info() { return self; } // Do not modify this line.
 Node get_predecessor() { return predecessor; }
+// Node get_successor() { return successor; }
+// Node* get_finger_table() { return finger_table; }
 std::vector<Node> get_successor_list() { return successor_list; }
 
-// ====== start of the utility functions ======
-
-/**
- * add 2 id. range = [0, 2^32-1] 共2^32個id, ps: 2^32-1 = 4294967295
-*/
-uint64_t add_id(uint64_t id_1, uint64_t id_2) {
-  return (id_1 + id_2) & ((1UL << 32) - 1);
+void create() {
+  predecessor.ip = "";
+  successor = self;
+  successor_list[0] = self;
 }
 
-bool isBetween(uint64_t id, uint64_t predecessor_id, uint64_t successor_id){
-  if (successor_id > predecessor_id) {
-    if (id > predecessor_id && id < successor_id) {
-      return true;  // 3 in (1, 5)
-    } else {
-      return false; // 3 not in (4, 5)
-    }
-  } else { // successor_id <= predecessor_id
-    if ( id > predecessor_id || id < successor_id) {
-      return true;  // 3 in (31, 5) ps跨過0了
-    } else {
-      return false; // 3 not in (31, 1)
-    }
-  }
-}
-
-bool isBetween_inclusive(uint64_t id, uint64_t predecessor_id, uint64_t successor_id){
-  if (successor_id > predecessor_id) {
-    if (id > predecessor_id && id <= successor_id) {
-      return true; // 3 in (1, 3) also in (1, 5)
-    } else {
-      return false;
-    }
-  } else { // successor_id <= predecessor_id
-    if ( id > predecessor_id || id <= successor_id) {
-      return true; // 3 in (31, 3) also in (31, 5)
-    } else {
-      return false;
-    }
-  }
-}
-
-// ====== start of the program functions ======
-
-/** Used in stablize()*/
 void change_predecessor(Node n) {
   predecessor = n;
 }
@@ -67,12 +32,6 @@ void change_predecessor(Node n) {
 // void change_successor(Node n) {
 //   successor = n;
 // }
-
-void create() {
-  predecessor.ip = "";
-  successor = self;
-  successor_list[0] = self;
-}
 
 void join(Node n) { // n is a known node on Chrod ring
   predecessor.ip = "";
@@ -98,84 +57,96 @@ void join(Node n) { // n is a known node on Chrod ring
 
 }
 
-/**
- * Used by find_successor().
- * search for for the highest predecessor of id.
- * 從 finger table 中由後往回，尋找 finger in (我, keyid)的finger，如果沒finger便自己負責
- * ex: keyid=54 (n48 in (n8, k54)), return n48
-*/
+bool isBetween_inclusive(uint64_t id, uint64_t predecessor_id, uint64_t successor_id){
+  if (successor_id > predecessor_id) {
+    if (id > predecessor_id && id <= successor_id) {
+      return true;
+    } else {
+      return false;
+    }
+  } else { // successor_id <= predecessor_id
+    if ( id > predecessor_id || id <= successor_id) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+}
+
+bool isBetween(uint64_t id, uint64_t predecessor_id, uint64_t successor_id){
+  if (successor_id > predecessor_id) {
+    if (id > predecessor_id && id < successor_id) {
+      return true;
+    } else {
+      return false;
+    }
+  } else { // successor_id <= predecessor_id
+    if ( id > predecessor_id || id < successor_id) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+}
+
+uint64_t add_id(uint64_t id_1, uint64_t id_2) {
+  return (id_1 + id_2) & ((1UL << 32) - 1);
+}
+
 Node closest_preceding_node (uint64_t id) {
   for ( int i = 3; i >= 0; i-- ) {
-    // test print
+    
     // if (self.id == 373792412 && id == 100663296) {
     //   std::cout << "ID:" << id << "\n";
     //   std::cout << "Finger id:" << finger_table[i].id << "\n";
     //   std::cout << "Self id:" << self.id << "\n";
     // }    
 
-    // 一個 node 負責的 range 為 [pre_id+1, node_id] == (pre_id, node_id]
-    // node_id 不重複，所以 == (pre_id, node_id) ??
     if ( isBetween(finger_table[i].id, self.id, id) ) {
       if (finger_table[i].id != 0 && finger_table[i].id != self.id){
+
         return finger_table[i];
-      }
+      } 
     }
   }
 
-  // 當沒有 successor 時，才會由我負責
   return self;
 }
 
-/**
- * Find successor given keyid. Successor 負責的範圍是 (n-1, n] 但不考慮id重複
-*/
+/* finger table version */
 Node find_successor(uint64_t id) {
+  // TODO: implement your `find_successor` RPC
   Node closest_node;
   try {
 
-    // 繼任者負責這個 id -> return 繼任者
     if ( isBetween_inclusive(id, self.id, successor.id) ){
+      // std::cout << "Node:" << self.id << ": Direct Return \n";
+
       return successor;
+
     } else {
-      // 剩下的選項只剩我自己，和 finger 中的 node
+ 
       closest_node = closest_preceding_node(id);
       if (closest_node.id == self.id) {
-        // 我負責
+
         return self;
       } else {
-        // 由某個 finger 負責、或最後一個 finger 繼續找下去
         rpc::client client(closest_node.ip, closest_node.port); 
         return client.call("find_successor", id).as<Node>();
       }
     }
 
   } catch (std::exception &e) {
-    // std::cout << "Node:" << self.id << " find_successor error" << "\n" ;
-    // std::cout << "  closest_node: " << closest_node.id << "\n" ;
+    // Handling Fail
+    // std::cout << "Node:" << self.id << ":find_successor err" << "\n" ;
+    // std::cout << "     Close Node:" << closest_node.id << "\n" ;
+
+
   }
   return self;
 }
 
-/**
- * Called periodicly
- * predecessor: Ring 中的前任者，即指向我的 Node
- * 若 predecessor 離線將 ip 設為空字串
-*/
-void check_predecessor() {
-  try {
-    rpc::client p(predecessor.ip, predecessor.port);
-    Node n = p.call("get_info").as<Node>();
-  } catch (std::exception &e) {
-    predecessor.ip = "";
-    // std::cout << "check_predecessor error \n";
-  }
-}
-
 uint64_t next = 0;
-/**
- * Called periodicly
- * Refresh finger table entry, refresh one entry at one call.
-*/
 void fix_fingers(){
   try {
     if (next >= 4){
@@ -194,16 +165,10 @@ void fix_fingers(){
     
     next = next + 1;
   } catch (std::exception &e) {
-    // std::cout << "fix_fingers error" << "\n" ;
+    // std::cout << "fix_fingers err" << "\n" ;
   } 
 }
 
-/**
- * Used in stablize()
- * successor_list stores 5 fingers, replace a new node on a old node.
- * @param died_node old node object to be replaced.
- * @param new_node new node object.
- */
 void update_finger_table(Node died_node, Node new_node){
   for (int i=0; i<=3; i++){
     if (died_node.id == finger_table[i].id) {
@@ -212,13 +177,8 @@ void update_finger_table(Node died_node, Node new_node){
   }
 }
 
-/**
- * Used in stablize()
- * successor_list stores the next 3 successor, make a direct update on 1st.
- * call 1st get_successor_list() to update the 2nd, 3nd one.
- */
-void update_successor_list(Node first_successor) {
-  successor_list[0] = first_successor;
+void update_successor_list(Node su_node) {
+  successor_list[0] = su_node;
 
   rpc::client client(successor.ip, successor.port); 
   std::vector<Node> new_successor_list = client.call("get_successor_list").as<std::vector<Node>>();
@@ -369,14 +329,24 @@ void stablize(){
 
 }
 
-/**
- * Notifier think he is my predecessor，若 notifier 插隊在我和目前的 predecessor 之間，將 notifier 改成新的 predecessor。
- * 需由其他 Node 呼叫，不能由自己呼叫
-*/
-void notify(Node notifier){
-  if ( predecessor.ip == "" || isBetween(notifier.id, predecessor.id, self.id) ) {
-    predecessor = notifier;
-    std::cout <<"notify: "<<self.id<<" recieve from "<<predecessor.id<<", predecessor changed\n" ;
+void notify(Node n){
+  // std::cout << "In notify  :" << self.port << "\n";
+  // std::cout << "In notify  :" << predecessor.ip << "\n";
+
+  if ( predecessor.ip == "" || isBetween(n.id, predecessor.id, self.id) ) {
+    predecessor = n;
+    // std::cout << "notify()" << "\n" ;
+  }
+
+}
+
+void check_predecessor() {
+  try {
+    rpc::client client(predecessor.ip, predecessor.port);
+    Node n = client.call("get_info").as<Node>();
+  } catch (std::exception &e) {
+    predecessor.ip = "";
+    // std::cout << "check_predecessor Err \n";
   }
 }
 
@@ -385,15 +355,19 @@ void register_rpcs() {
 
   add_rpc("get_predecessor", &get_predecessor); 
   add_rpc("change_predecessor", &change_predecessor);
+  // add_rpc("get_successor", &get_successor);
+  // add_rpc("change_successor", &change_successor);
   add_rpc("notify", &notify);
   add_rpc("get_successor_list", &get_successor_list);
+
+  // add_rpc("get_finger_table", &get_finger_table);
+
   add_rpc("create", &create);
   add_rpc("join", &join);
   add_rpc("find_successor", &find_successor);
 }
 
 void register_periodics() {
-  // 順序不建議調換
   add_periodic(check_predecessor);
   add_periodic(stablize);
   add_periodic(fix_fingers);

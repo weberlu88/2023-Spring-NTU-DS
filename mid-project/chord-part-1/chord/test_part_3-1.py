@@ -2,11 +2,25 @@
 
 import msgpackrpc
 import time
+import subprocess
+
+def killall_running_nodes():
+	# Get list of all processes with name starting with "chord"
+	try:
+		processes = subprocess.check_output(["pgrep", "chord"], universal_newlines=True).split()
+		# Kill each process in the list
+		for pid in processes:
+			subprocess.run(["kill", pid])
+		time.sleep(0.01)
+		print(f"info: Killed {len(processes)} chord processes.")
+	except:
+		print("info: no runnung chord processes.")
 
 ids = []
 find_successor_req = 0
 incorrect = 0
-t = 2
+# t = 2
+t = 0.11
 
 def add_id(id):
 	if id not in ids:
@@ -66,9 +80,23 @@ def wait(t):
 	print("wait {} sec...".format(t))
 	time.sleep(t)
 
+killall_running_nodes()
+try:
+	time.sleep(0.1)
+	cmd_str = "./chord 127.0.0.1 5057 & ./chord 127.0.0.1 5058 & ./chord 127.0.0.1 5059 &\
+			   ./chord 127.0.0.1 5060 & ./chord 127.0.0.1 5061 & ./chord 127.0.0.1 5062 &\
+			   ./chord 127.0.0.1 5063 & ./chord 127.0.0.1 5064 &"
+	subprocess.run(cmd_str, shell=True)
+	time.sleep(2)
+	print("deploy chrod node ok")
+except:
+	print("info: start nodes error")
+
+print("start create")
 create(5057)
 wait(t)
 
+print("start join and kill")
 join(5062, 5057)
 wait(10 * t)
 
@@ -126,3 +154,4 @@ else:
 	print("{} incorrect response(s).".format(incorrect))
 
 print("Do not forget to terminate your Chord nodes!")
+killall_running_nodes()
