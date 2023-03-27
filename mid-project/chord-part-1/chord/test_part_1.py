@@ -8,7 +8,7 @@ ids = []
 find_successor_req = 0
 incorrect = 0
 t = 2
-t = 0.12
+t = 0.12 # 0.2 才不會噴錯，0.12 會噴一個錯
 
 def add_id(id):
 	if id not in ids:

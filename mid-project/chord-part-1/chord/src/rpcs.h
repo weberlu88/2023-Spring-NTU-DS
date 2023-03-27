@@ -5,8 +5,9 @@
 #include "rpc/client.h"
 
 #include <iostream>
-#include <cstdint>
 #include <vector>
+#include <cstdint>
+
 
 Node self, successor, predecessor;
 Node finger_table[4];
@@ -25,39 +26,32 @@ uint64_t add_id(uint64_t id_1, uint64_t id_2) {
   return (id_1 + id_2) & ((1UL << 32) - 1);
 }
 
-bool isBetween(uint64_t id, uint64_t predecessor_id, uint64_t successor_id){
-  if (successor_id > predecessor_id) {
-    if (id > predecessor_id && id < successor_id) {
-      return true;  // 3 in (1, 5)
-    } else {
-      return false; // 3 not in (4, 5)
-    }
-  } else { // successor_id <= predecessor_id
-    if ( id > predecessor_id || id < successor_id) {
-      return true;  // 3 in (31, 5) ps跨過0了
-    } else {
-      return false; // 3 not in (31, 1)
-    }
+/** id is in (a, b), conserning cicurlar ring. */
+bool isBetween(uint64_t id, uint64_t a, uint64_t b){
+  if (b > a) {
+    // true:  3 in (1, 5)
+    // false: 3 not in (4, 5)
+    return (id > a && id < b); 
+  } else { // b <= a
+    // true: 3 in (31, 5) ps跨過0了
+    // false 3 not in (31, 1)
+    return ( id > a || id < b);
   }
 }
 
-bool isBetween_inclusive(uint64_t id, uint64_t predecessor_id, uint64_t successor_id){
-  if (successor_id > predecessor_id) {
-    if (id > predecessor_id && id <= successor_id) {
-      return true; // 3 in (1, 3) also in (1, 5)
-    } else {
-      return false;
-    }
-  } else { // successor_id <= predecessor_id
-    if ( id > predecessor_id || id <= successor_id) {
-      return true; // 3 in (31, 3) also in (31, 5)
-    } else {
-      return false;
-    }
+/** id is in (a, b], conserning cicurlar ring. */
+bool isBetween_inclusive(uint64_t id, uint64_t a, uint64_t b){
+  if (b > a) {
+    // true: 3 in (1, 3) also in (1, 5)
+    return (id > a && id <= b);
+  } else { // b <= a
+    // true: 3 in (31, 3) also in (31, 5)
+    return ( id > a || id <= b);
   }
 }
 
 // ====== start of the program functions ======
+// todo: 寫一個 function to get finger's id 讓最後一個 finger 繞半圈
 
 /** Used in stablize()*/
 void change_predecessor(Node n) {
@@ -74,28 +68,29 @@ void create() {
   successor_list[0] = self;
 }
 
-void join(Node n) { // n is a known node on Chrod ring
+/**
+ * Join ring containing Node n.
+*/
+void join(Node n) {
   predecessor.ip = "";
 
   try {
     rpc::client client(n.ip, n.port); // get the known node instance
-    successor = client.call("find_successor", self.id).as<Node>(); // use the known node to find the successor by new node id
+    successor = client.call("find_successor", self.id).as<Node>(); // ask who is my successor, giving my id as param
     
-    std::vector<Node> new_successor_list = client.call("get_successor_list").as<std::vector<Node>>();
+    std::vector<Node> new_s_lst = client.call("get_successor_list").as<std::vector<Node>>();
 
     successor_list[0] = successor;
-    successor_list[1] = new_successor_list[0];
-    successor_list[2] = new_successor_list[1];
+    successor_list[1] = new_s_lst[0];
+    successor_list[2] = new_s_lst[1];
 
-    // std::cout << "Node:" << self.id << "\n";
-    // std::cout << "     Su list 0:" << successor_list[0].id  << "\n";
-    // std::cout << "     Su list 1:" << successor_list[1].id  << "\n";
-    // std::cout << "     Su list 2:" << successor_list[2].id  << "\n";
-
+    // std::cout << "join: Node " << self.id << "\n";
+    // std::cout << "  Slist 0:" << new_s_lst[0].id  << std::endl;
+    // std::cout << "  Slist 1:" << new_s_lst[1].id  << std::endl;
+    // std::cout << "  Slist 2:" << new_s_lst[2].id  << std::endl;
   } catch (std::exception &e) {
-    // std::cout << "join err" << "\n";
+    // std::cout << "join: error" << std::endl;
   }
-
 }
 
 /**
@@ -383,13 +378,13 @@ void notify(Node notifier){
 void register_rpcs() {
   add_rpc("get_info", &get_info); // Do not modify this line.
 
-  add_rpc("get_predecessor", &get_predecessor); 
-  add_rpc("change_predecessor", &change_predecessor);
-  add_rpc("notify", &notify);
-  add_rpc("get_successor_list", &get_successor_list);
   add_rpc("create", &create);
   add_rpc("join", &join);
+  add_rpc("get_predecessor", &get_predecessor); 
+  add_rpc("change_predecessor", &change_predecessor);
+  add_rpc("get_successor_list", &get_successor_list);
   add_rpc("find_successor", &find_successor);
+  add_rpc("notify", &notify);
 }
 
 void register_periodics() {
