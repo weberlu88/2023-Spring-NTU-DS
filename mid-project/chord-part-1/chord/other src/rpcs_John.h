@@ -9,14 +9,12 @@
 #include <vector>
 
 Node self, successor, predecessor;
-Node finger_table[4];
-// Node successor_list[3];
-std::vector<Node> successor_list(3);
+Node finger_table[4]; // len = 4
+std::vector<Node> successor_list(3); // len = 3
 
 Node get_info() { return self; } // Do not modify this line.
 Node get_predecessor() { return predecessor; }
-// Node get_successor() { return successor; }
-// Node* get_finger_table() { return finger_table; }
+Node get_successor() { return successor; } // use by python test code
 std::vector<Node> get_successor_list() { return successor_list; }
 
 void create() {
@@ -29,9 +27,10 @@ void change_predecessor(Node n) {
   predecessor = n;
 }
 
-// void change_successor(Node n) {
-//   successor = n;
-// }
+// no use
+void change_successor(Node n) {
+  successor = n;
+}
 
 void join(Node n) { // n is a known node on Chrod ring
   predecessor.ip = "";
@@ -57,7 +56,7 @@ void join(Node n) { // n is a known node on Chrod ring
 
 }
 
-bool inCloseRange(uint64_t id, uint64_t predecessor_id, uint64_t successor_id){
+bool isBetween_inclusive(uint64_t id, uint64_t predecessor_id, uint64_t successor_id){
   if (successor_id > predecessor_id) {
     if (id > predecessor_id && id <= successor_id) {
       return true;
@@ -73,7 +72,7 @@ bool inCloseRange(uint64_t id, uint64_t predecessor_id, uint64_t successor_id){
   }
 }
 
-bool inOpenRange(uint64_t id, uint64_t predecessor_id, uint64_t successor_id){
+bool isBetween(uint64_t id, uint64_t predecessor_id, uint64_t successor_id){
   if (successor_id > predecessor_id) {
     if (id > predecessor_id && id < successor_id) {
       return true;
@@ -102,7 +101,7 @@ Node closest_preceding_node (uint64_t id) {
     //   std::cout << "Self id:" << self.id << "\n";
     // }    
 
-    if ( inOpenRange(finger_table[i].id, self.id, id) ) {
+    if ( isBetween(finger_table[i].id, self.id, id) ) {
       if (finger_table[i].id != 0 && finger_table[i].id != self.id){
 
         return finger_table[i];
@@ -119,7 +118,7 @@ Node find_successor(uint64_t id) {
   Node closest_node;
   try {
 
-    if ( inCloseRange(id, self.id, successor.id) ){
+    if ( isBetween_inclusive(id, self.id, successor.id) ){
       // std::cout << "Node:" << self.id << ": Direct Return \n";
 
       return successor;
@@ -192,26 +191,23 @@ void stablize(){
 
   try {
 
-    Node pre_node;
-    // uint64_t temp_su_id = successor.id;
-    // std::cout << "Node:" << self.id << "\n";
-    // std::cout << "    temp id:" << temp_su_id << "\n";
+    Node candidate_s;
 
     if ( successor.id != 0 && self.id != successor.id ) {
 
       rpc::client client(successor.ip, successor.port); 
-      pre_node = client.call("get_predecessor").as<Node>();
+      // try 1: test successor is alive or not
+      // try 2: test successor.predecessor is alive or not
+      candidate_s = client.call("get_predecessor").as<Node>();
 
     } else { // when only have root node [self.id == successor.id]
-      pre_node = predecessor;
-      // std::cout << "IN sta:" << pre_node.id << "\n";
+      candidate_s = predecessor;
+      // std::cout << "IN sta:" << candidate_s.id << "\n";
     }
 
-    if (pre_node.id != 0) { // check if pre_node exist. if exist, check weather to change the successor
-
-      if ( inOpenRange(pre_node.id, self.id, successor.id) ) {
-        successor = pre_node;
-        // std::cout << "    change id:" << successor.id << "\n";
+    if (candidate_s.id != 0) { // check if candidate_s exist. if exist, check weather to change the successor
+      if ( isBetween(candidate_s.id, self.id, successor.id) ) {
+        successor = candidate_s;
       } 
     } 
     
@@ -231,7 +227,9 @@ void stablize(){
   } catch (std::exception &e) {
 
     // std::cout << "stablize Err \n";
-    if (successor.id == successor_list[0].id) { // fail to find the successor.predecessor
+    // case: successor died, fail to find the successor.predecessor
+    // let successor_list[1] as alternative successor, replace the origin one
+    if (successor.id == successor_list[0].id) { 
       // std::cout << "Node:" << self.id << " Port: " << self.port << "\n";
       // std::cout << "    stablize Err" << ":successor.id == successor_list[0].id" << "\n";
 
@@ -333,7 +331,7 @@ void notify(Node n){
   // std::cout << "In notify  :" << self.port << "\n";
   // std::cout << "In notify  :" << predecessor.ip << "\n";
 
-  if ( predecessor.ip == "" || inOpenRange(n.id, predecessor.id, self.id) ) {
+  if ( predecessor.ip == "" || isBetween(n.id, predecessor.id, self.id) ) {
     predecessor = n;
     // std::cout << "notify()" << "\n" ;
   }
@@ -352,16 +350,10 @@ void check_predecessor() {
 
 void register_rpcs() {
   add_rpc("get_info", &get_info); // Do not modify this line.
-
   add_rpc("get_predecessor", &get_predecessor); 
   add_rpc("change_predecessor", &change_predecessor);
-  // add_rpc("get_successor", &get_successor);
-  // add_rpc("change_successor", &change_successor);
   add_rpc("notify", &notify);
   add_rpc("get_successor_list", &get_successor_list);
-
-  // add_rpc("get_finger_table", &get_finger_table);
-
   add_rpc("create", &create);
   add_rpc("join", &join);
   add_rpc("find_successor", &find_successor);

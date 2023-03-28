@@ -10,11 +10,14 @@
 
 
 Node self, successor, predecessor;
+static int finger_size = 5; // finger table store 5 entries
 Node finger_table[4];
+// std::vector<Node> finger_table(finger_size);
 std::vector<Node> successor_list(3);
 
 Node get_info() { return self; } // Do not modify this line.
 Node get_predecessor() { return predecessor; }
+Node get_successor() { return successor; } // for python testing
 std::vector<Node> get_successor_list() { return successor_list; }
 
 // ====== start of the utility functions ======
@@ -22,8 +25,8 @@ std::vector<Node> get_successor_list() { return successor_list; }
 /**
  * add 2 id. range = [0, 2^32-1] 共2^32個id, ps: 2^32-1 = 4294967295
 */
-uint64_t add_id(uint64_t id_1, uint64_t id_2) {
-  return (id_1 + id_2) & ((1UL << 32) - 1);
+uint64_t add_id(uint64_t id1, uint64_t id2) {
+  return (id1 + id2) & ((1UL << 32) - 1); // mod 2^32-1
 }
 
 /** id is in (a, b), conserning cicurlar ring. */
@@ -97,10 +100,10 @@ void join(Node n) {
  * Used by find_successor().
  * search for for the highest predecessor of id.
  * 從 finger table 中由後往回，尋找 finger in (我, keyid)的finger，如果沒finger便自己負責
- * ex: keyid=54 (n48 in (n8, k54)), return n48
+ * ex: i'm n8, keyid=54 (n48 in (n8, k54)), return finger n48
 */
 Node closest_preceding_node (uint64_t id) {
-  for ( int i = 3; i >= 0; i-- ) {
+  for ( int i = 3; i >= 0; i-- ){
     // test print
     // if (self.id == 373792412 && id == 100663296) {
     //   std::cout << "ID:" << id << "\n";
@@ -110,8 +113,8 @@ Node closest_preceding_node (uint64_t id) {
 
     // 一個 node 負責的 range 為 [pre_id+1, node_id] == (pre_id, node_id]
     // node_id 不重複，所以 == (pre_id, node_id) ??
-    if ( isBetween(finger_table[i].id, self.id, id) ) {
-      if (finger_table[i].id != 0 && finger_table[i].id != self.id){
+    if ( isBetween(finger_table[i].id, self.id, id) ){
+      if (finger_table[i].id != self.id && finger_table[i].id != 0){
         return finger_table[i];
       }
     }
@@ -134,7 +137,7 @@ Node find_successor(uint64_t id) {
     } else {
       // 剩下的選項只剩我自己，和 finger 中的 node
       closest_node = closest_preceding_node(id);
-      if (closest_node.id == self.id) {
+      if (closest_node.id == self.id){
         // 我負責
         return self;
       } else {
@@ -162,11 +165,11 @@ void check_predecessor() {
     Node n = p.call("get_info").as<Node>();
   } catch (std::exception &e) {
     predecessor.ip = "";
-    // std::cout << "check_predecessor error \n";
+    // std::cout << "check_predecessor: error \n";
   }
 }
 
-uint64_t next = 0;
+uint64_t next = 0; // index to refresh
 /**
  * Called periodicly
  * Refresh finger table entry, refresh one entry at one call.
@@ -177,17 +180,17 @@ void fix_fingers(){
       next = 0;
     }
 
-    if (next != 0){
-      finger_table[next] = find_successor( add_id(self.id, (1ULL << (28+next)) ) );
-    } else {
+    if (next == 0){
       finger_table[next] = successor;
+    } else {
+      finger_table[next] = find_successor(add_id(self.id, (1ULL << (28+next)) ));
     }
 
-    // std::cout << "Node:" << self.id << "\n";
-    // std::cout << "        Finger " << next << " ID:" << add_id(self.id, (1ULL << (28+next)) ) << "\n";
-    // std::cout << "        Finger " << next << " Node:" << finger_table[next].id << "\n";
+    // std::cout << "fix_fingers: Node " << self.id << "\n";
+    // std::cout << "  Finger " << next << " ID:" << add_id(self.id, (1ULL << (28+next)) ) << "\n";
+    // std::cout << "  Finger " << next << " Node:" << finger_table[next].id << "\n";
     
-    next = next + 1;
+    next++;
   } catch (std::exception &e) {
     // std::cout << "fix_fingers error" << "\n" ;
   } 
@@ -201,7 +204,7 @@ void fix_fingers(){
  */
 void update_finger_table(Node died_node, Node new_node){
   for (int i=0; i<=3; i++){
-    if (died_node.id == finger_table[i].id) {
+    if (finger_table[i].id == died_node.id) {
       finger_table[i] = new_node;
     }
   }
@@ -223,29 +226,45 @@ void update_successor_list(Node first_successor) {
 
 }
 
+/**
+ * Only one node in the ring.
+*/
+void initiate_ring(){
+  finger_table[0] = self;
+  finger_table[1] = self;
+  finger_table[2] = self;
+  finger_table[3] = self;
+
+  successor = self;
+  predecessor = Node{};
+  successor_list[0] = self;
+  successor_list[1] = self;
+  successor_list[2] = self;
+}
+
+/**
+ * stabilize() 檢查我和繼任者中間是否被插隊，有則換掉我的繼任者為n'，並通知繼任者n'。
+ * notify(n') 修正我的前任，此方法由別人喚醒。
+ * ex: N21 檢查自己和 N32 之間，被 N24 插入，new 繼任者 is N24。
+*/
 void stablize(){
-
   try {
-
-    Node pre_node;
-    // uint64_t temp_su_id = successor.id;
-    // std::cout << "Node:" << self.id << "\n";
-    // std::cout << "    temp id:" << temp_su_id << "\n";
+    Node candidate_s;
 
     if ( successor.id != 0 && self.id != successor.id ) {
 
       rpc::client client(successor.ip, successor.port); 
-      pre_node = client.call("get_predecessor").as<Node>();
+      candidate_s = client.call("get_predecessor").as<Node>();
 
     } else { // when only have root node [self.id == successor.id]
-      pre_node = predecessor;
-      // std::cout << "IN sta:" << pre_node.id << "\n";
+      candidate_s = predecessor;
+      // std::cout << "IN sta:" << candidate_s.id << "\n";
     }
 
-    if (pre_node.id != 0) { // check if pre_node exist. if exist, check weather to change the successor
+    if (candidate_s.id != 0) { // check if candidate_s exist. if exist, check weather to change the successor
 
-      if ( isBetween(pre_node.id, self.id, successor.id) ) {
-        successor = pre_node;
+      if ( isBetween(candidate_s.id, self.id, successor.id) ) {
+        successor = candidate_s;
         // std::cout << "    change id:" << successor.id << "\n";
       } 
     } 
@@ -261,12 +280,12 @@ void stablize(){
       client2.call("notify", self);   
 
       update_successor_list(successor);
-      // }
     }
   } catch (std::exception &e) {
 
-    // std::cout << "stablize Err \n";
-    if (successor.id == successor_list[0].id) { // fail to find the successor.predecessor
+    std::cout << "stablize Except 1: Node: "<<self.id<< "\n";
+    // case: fail to find the successor.predecessor
+    if (successor.id == successor_list[0].id) { 
       // std::cout << "Node:" << self.id << " Port: " << self.port << "\n";
       // std::cout << "    stablize Err" << ":successor.id == successor_list[0].id" << "\n";
 
@@ -289,26 +308,10 @@ void stablize(){
 
           // std::cout << "Node:" << self.id << " Port: " << self.port << "\n";
           // std::cout << "    Self id:" << self.id << " Successor id: " << successor.id << "\n";
-        } else { // successor == self, so only exit one node
-
-
-          finger_table[0] = self;
-          finger_table[1] = self;
-          finger_table[2] = self;
-          finger_table[3] = self;
-
-          successor = self;
-          Node temp_node{};
-          predecessor = temp_node;
-          successor_list[0] = self;
-          successor_list[1] = self;
-          successor_list[2] = self;
-
-          // std::cout << "Node:" << self.id << " Port: " << self.port << "\n";
-          // std::cout << "    In Self id:" << self.id << " Successor id: " << successor.id << "\n";
+        } else { 
+          // successor == self, so only exit one node
+          initiate_ring();
         }
-        
-
 
       } catch (std::exception &e) {
         // std::cout << "Node:" << self.id << " Port:" << self.port << "\n";
@@ -325,36 +328,26 @@ void stablize(){
             successor_list[0] =  successor_list[2];
             successor_list[1] = new_successor_list[0];
             successor_list[2] = new_successor_list[1];          
-          } else { // successor == self, so only exit one node
-            finger_table[0] = self;
-            finger_table[1] = self;
-            finger_table[2] = self;
-            finger_table[3] = self;
-
-            successor = self;
-            Node temp_node{};
-            predecessor = temp_node;
-            successor_list[0] = self;
-            successor_list[1] = self;
-            successor_list[2] = self;
+          } else { 
+            // successor == self, so only exit one node
+            initiate_ring();
           }
 
 
         } catch (std::exception &e) {
-          // std::cout << "Node:" << self.id << " Port:" << self.port << "\n";
-          // std::cout << "    stablize Err" << "catch 2 fail successor port: " <<  successor_list[2].port <<  "\n";
-          // std::cout << "Three node die in a row" << "\n";
+          // do nothing
+          // successor_list[1] still dead, can find successor_list[2] as alt, but i'm lazy.
         }
       }
 
-    } else { // after changing the successor to successor.predecessor, successor.predecessor is died
-      
+    } 
+    else { 
+      // after changing the successor to successor.predecessor, successor.predecessor is died
       // because successor.predecessor is died, we no need to change successor, but need to restore successor
       successor = successor_list[0];
-      Node temp_node{};
 
       rpc::client client5(successor.ip, successor.port);
-      client5.call("change_predecessor", temp_node); // tell the successor its predecessor is died
+      client5.call("change_predecessor", Node{}); // tell the successor its predecessor is died
       // std::cout << "Node:" << self.id << " Port:" << self.port << "\n";
       // std::cout << "    stablize Err" << ":no notify to change successor" << "\n";
     }
@@ -365,6 +358,7 @@ void stablize(){
 }
 
 /**
+ * Used in stablize().
  * Notifier think he is my predecessor，若 notifier 插隊在我和目前的 predecessor 之間，將 notifier 改成新的 predecessor。
  * 需由其他 Node 呼叫，不能由自己呼叫
 */
@@ -382,6 +376,7 @@ void register_rpcs() {
   add_rpc("join", &join);
   add_rpc("get_predecessor", &get_predecessor); 
   add_rpc("change_predecessor", &change_predecessor);
+  add_rpc("get_successor", &get_successor);
   add_rpc("get_successor_list", &get_successor_list);
   add_rpc("find_successor", &find_successor);
   add_rpc("notify", &notify);

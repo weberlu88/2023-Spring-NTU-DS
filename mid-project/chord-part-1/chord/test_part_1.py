@@ -107,6 +107,7 @@ wait(10 * t)
 
 stride = (1 << 32) // 128
 testcases = [3, 14, 35, 46, 65, 70, 73, 88, 91, 102, 112, 123]
+# testcases = [3, 14, 35, 46]
 
 for case in testcases:
 	id = stride * case

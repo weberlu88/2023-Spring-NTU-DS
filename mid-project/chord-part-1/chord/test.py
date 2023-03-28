@@ -27,7 +27,7 @@ id_to_port = {}
 find_successor_req = 0
 incorrect = 0
 t = 2
-t = 0.11
+t = 0.12
 
 def add_id(id, port):
 	if id not in ids:
@@ -67,7 +67,7 @@ try:
 	time.sleep(0.5)
 	cmd_str = "./chord 127.0.0.1 5057 & ./chord 127.0.0.1 5058 & ./chord 127.0.0.1 5059 &"
 	subprocess.run(cmd_str, shell=True)
-	time.sleep(1)
+	time.sleep(t)
 except:
 	print("info: start nodes error")
 
@@ -176,3 +176,55 @@ void stablize(){
   // }
 }
 '''
+
+"""
+3/28 backup
+/**
+ * stabilize() 檢查我和繼任者中間是否被插隊，有則換掉我的繼任者為n'，並通知繼任者n'。
+ * notify(n') 修正我的前任，此方法由別人喚醒。
+ * ex: N21 檢查自己和 N32 之間，被 N24 插入，new 繼任者 is N24。
+*/
+void stablize(){
+  try {
+
+    Node candidate_s;
+    rpc::client *client; 
+
+    // i'm the root node of ring and dont have successor
+    // if (successor.id == 0 || self.id == successor.id) {
+    //   candidate_s = predecessor;
+    //   initiate_ring();
+    //   // return; // cannot return
+    // }
+
+    // Get successor's predecessor
+    // case 1: successor's predecessor is myself
+    // case 2: successor's predecessor is a new inserted node
+    if ( successor.id != 0 && self.id != successor.id ) {
+
+      client = new rpc::client(successor.ip, successor.port); 
+      candidate_s = client->call("get_predecessor").as<Node>();
+
+    } else { // when i'm root node [self.id == successor.id]
+      candidate_s = predecessor;
+      // std::cout << "stablize: Node: "<<self.id<<" has candidate_s: "<< candidate_s.id << "\n";
+    }
+
+    if (candidate_s.id != 0) { // case 2
+      if ( isBetween(candidate_s.id, self.id, successor.id) ) {
+        successor = candidate_s;
+      } 
+    } 
+    
+    if ( successor.id != 0 && self.id != successor.id) {
+      // if (temp_su_id != successor.id) { // if successor change, tell it to change predecessor
+
+      // std::cout << "Node:" << self.id << " Port: " << self.port << "\n";
+      // std::cout << "    Out Self id:" << self.id << " Successor id: " << successor.id << "\n";
+      // client = new rpc::client(successor.ip, successor.port);
+      // client->call("notify", self);
+      rpc::client client2(successor.ip, successor.port);
+      client2.call("notify", self);
+
+      update_successor_list(successor);
+"""
