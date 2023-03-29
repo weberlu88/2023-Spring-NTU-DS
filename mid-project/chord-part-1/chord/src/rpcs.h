@@ -10,9 +10,8 @@
 
 
 Node self, successor, predecessor;
-static int finger_size = 5; // finger table store 5 entries
-Node finger_table[4];
-// std::vector<Node> finger_table(finger_size);
+static int finger_size = 4; // finger table store 4 entries
+std::vector<Node> finger_table(finger_size);
 std::vector<Node> successor_list(3);
 
 Node get_info() { return self; } // Do not modify this line.
@@ -104,9 +103,9 @@ void join(Node n) {
  * ex: i'm n8, keyid=54 (n48 in (n8, k54)), return finger n48
 */
 Node closest_preceding_node (uint64_t id) {
-  for ( int i = 3; i >= 0; i-- ){
+  for ( int i = finger_size-1; i >= 0; i-- ){
     // test print
-    // if (self.id == 373792412 && id == 100663296) {
+    // if (self.id == 373792412 && id == 100663296) { // 373792412 is port 5059
     //   std::cout << "ID:" << id << "\n";
     //   std::cout << "Finger id:" << finger_table[i].id << "\n";
     //   std::cout << "Self id:" << self.id << "\n";
@@ -177,7 +176,7 @@ uint64_t next = 0; // index to refresh
 */
 void fix_fingers(){
   try {
-    if (next >= 4){
+    if (next >= (uint64_t)finger_size){
       next = 0;
     }
 
@@ -204,7 +203,7 @@ void fix_fingers(){
  * @param new_node new node object.
  */
 void update_finger_table(Node died_node, Node new_node){
-  for (int i=0; i<=3; i++){
+  for (int i=0; i<=finger_size-1; i++){
     if (finger_table[i].id == died_node.id) {
       finger_table[i] = new_node;
     }
@@ -231,16 +230,15 @@ void update_successor_list(Node first_successor) {
  * Only one node in the ring.
 */
 void initiate_ring(){
-  finger_table[0] = self;
-  finger_table[1] = self;
-  finger_table[2] = self;
-  finger_table[3] = self;
+  for (auto n: finger_table){
+    n = self;
+  }
+  for (auto n: successor_list){
+    n = self;
+  }
 
   successor = self;
   predecessor = Node{};
-  successor_list[0] = self;
-  successor_list[1] = self;
-  successor_list[2] = self;
 }
 
 /**
