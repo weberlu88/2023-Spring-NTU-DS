@@ -25,7 +25,7 @@ uint64_t hash(Node const &n) {
 std::vector<std::thread> periodics;
 std::atomic_bool terminated = false, ready_to_exit = false;
 // uint64_t interval = 2000;
-uint64_t interval = 100;
+uint64_t interval = 200;
 
 void add_periodic(std::function<void(void)> func) {
   periodics.emplace_back([func]() {

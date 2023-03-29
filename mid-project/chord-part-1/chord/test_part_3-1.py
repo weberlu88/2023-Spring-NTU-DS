@@ -20,7 +20,7 @@ ids = []
 find_successor_req = 0
 incorrect = 0
 # t = 2
-t = 0.11
+t = 0.2
 
 def add_id(id):
 	if id not in ids:
