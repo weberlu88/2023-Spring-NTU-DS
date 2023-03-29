@@ -19,7 +19,8 @@ Node get_info() { return self; } // Do not modify this line.
 Node get_predecessor() { return predecessor; }
 Node get_successor() { return successor; } // for python testing
 std::vector<Node> get_successor_list() { return successor_list; }
-
+void fix_dead_successor();
+void fix_dead_candidate();
 // ====== start of the utility functions ======
 
 /**
@@ -248,113 +249,48 @@ void initiate_ring(){
  * ex: N21 檢查自己和 N32 之間，被 N24 插入，new 繼任者 is N24。
 */
 void stablize(){
-  try {
-    Node candidate_s;
+  
+  Node candidate_s;
 
-    if ( successor.id != 0 && self.id != successor.id ) {
-
+  if ( successor.id != 0 && self.id != successor.id ) {
+    // Get successor's predecessor
+    // case 1: successor's predecessor is myself
+    // case 2: successor's predecessor is a new inserted node
+    try {
       rpc::client client(successor.ip, successor.port); 
       candidate_s = client.call("get_predecessor").as<Node>();
-
-    } else { // when only have root node [self.id == successor.id]
-      candidate_s = predecessor;
-      // std::cout << "IN sta:" << candidate_s.id << "\n";
+    } catch (std::exception &e) {
+      fix_dead_successor(); // handle if successor failed
     }
 
-    if (candidate_s.id != 0) { // check if candidate_s exist. if exist, check weather to change the successor
-
-      if ( isBetween(candidate_s.id, self.id, successor.id) ) {
-        successor = candidate_s;
-        // std::cout << "    change id:" << successor.id << "\n";
-      } 
-    } 
-    
-    if ( successor.id != 0 && self.id != successor.id) {
-      // if (temp_su_id != successor.id) { // if successor change, tell it to change predecessor
-
-      // std::cout << "Node:" << self.id << " Port: " << self.port << "\n";
-      // std::cout << "    Out Self id:" << self.id << " Successor id: " << successor.id << "\n";
-      rpc::client client2(successor.ip, successor.port);
-
-      // std::cout << "Notify Node  :" << successor.port << "\n";
-      client2.call("notify", self);   
-
-      update_successor_list(successor);
-    }
-  } catch (std::exception &e) {
-
-    std::cout << "stablize Except 1: Node: "<<self.id<< "\n";
-    // case: fail to find the successor.predecessor
-    if (successor.id == successor_list[0].id) { 
-      // std::cout << "Node:" << self.id << " Port: " << self.port << "\n";
-      // std::cout << "    stablize Err" << ":successor.id == successor_list[0].id" << "\n";
-
-      try {
-
-        if (successor_list[1].id != self.id) {
-          rpc::client client3(successor_list[1].ip, successor_list[1].port);
-          std::vector<Node> new_successor_list = client3.call("get_successor_list").as<std::vector<Node>>();
-
-          // std::cout << "Node:" << self.id << " Port: " << self.port << "\n";
-          // std::cout << "    stablize Err" << ":catch 1 successor port:" << successor_list[1].port << "\n";
-          
-          /*update successor, successor_list, finger_table*/
-          update_finger_table(successor_list[0], successor_list[1]);
-          
-          successor = successor_list[1];
-          successor_list[0] = successor_list[1];
-          successor_list[1] = new_successor_list[0];
-          successor_list[2] = new_successor_list[1];
-
-          // std::cout << "Node:" << self.id << " Port: " << self.port << "\n";
-          // std::cout << "    Self id:" << self.id << " Successor id: " << successor.id << "\n";
-        } else { 
-          // successor == self, so only exit one node
-          initiate_ring();
-        }
-
-      } catch (std::exception &e) {
-        // std::cout << "Node:" << self.id << " Port:" << self.port << "\n";
-        // std::cout << "    stablize Err" << "catch 1 fail successor port: " <<  successor_list[1].port <<  "\n";
-        try {
-          if (successor_list[1].id != self.id) {
-            rpc::client client4(successor_list[2].ip, successor_list[2].port);
-            std::vector<Node> new_successor_list = client4.call("get_successor_list").as<std::vector<Node>>();
-            
-            update_finger_table(successor_list[0], successor_list[2]);
-            update_finger_table(successor_list[1], successor_list[2]);
-
-            successor = successor_list[2];
-            successor_list[0] =  successor_list[2];
-            successor_list[1] = new_successor_list[0];
-            successor_list[2] = new_successor_list[1];          
-          } else { 
-            // successor == self, so only exit one node
-            initiate_ring();
-          }
-
-
-        } catch (std::exception &e) {
-          // do nothing
-          // successor_list[1] still dead, can find successor_list[2] as alt, but i'm lazy.
-        }
-      }
-
-    } 
-    else { 
-      // after changing the successor to successor.predecessor, successor.predecessor is died
-      // because successor.predecessor is died, we no need to change successor, but need to restore successor
-      successor = successor_list[0];
-
-      rpc::client client5(successor.ip, successor.port);
-      client5.call("change_predecessor", Node{}); // tell the successor its predecessor is died
-      // std::cout << "Node:" << self.id << " Port:" << self.port << "\n";
-      // std::cout << "    stablize Err" << ":no notify to change successor" << "\n";
-    }
-
-
+  } else { 
+    // When i'm the root node [self.id == successor.id]
+    candidate_s = predecessor;
   }
 
+  // if candidate_s exist, check weather to change the successor to candidate_s (case 2)
+  // then notify candidate_s i'm possible your predecessor
+  if (candidate_s.id != 0) { 
+    if ( isBetween(candidate_s.id, self.id, successor.id) ) {
+      successor = candidate_s;
+      // std::cout << "stablize: change successor id:" << successor.id << "\n";
+    } 
+  } 
+  
+  if ( successor.id != 0 && self.id != successor.id) {
+    try {
+      rpc::client client(successor.ip, successor.port);
+      client.call("notify", self);   
+    } catch (std::exception &e) {
+      fix_dead_candidate(); // handle if candidate failed to notify
+    }
+    
+    try {
+      update_successor_list(successor);
+    } catch (std::exception &e) {
+      fix_dead_successor(); // handle if successor failed
+    }
+  }
 }
 
 /**
@@ -369,6 +305,87 @@ void notify(Node notifier){
   }
 }
 
+/**
+ * Used in stablize().
+ * Handle after changing the successor to successor.predecessor, successor.predecessor failed.
+ * Approach: restore the origin successor from successor_list[0].
+*/
+void fix_dead_candidate() {
+  successor = successor_list[0];
+  rpc::client client(successor.ip, successor.port);
+  try {
+    client.call("change_predecessor", Node{});
+  } catch (std::exception &e) {
+    // do nothing
+  }
+}
+
+/**
+ * Used in stablize().
+ * Handle if the first node (both first two nodes) of successor_list failed. (invoked by exception during rpc call)
+ * Finger table: replace the dead finger(s) with a alive successor.
+ * Successor & Successor_list: replace the dead successor(s) with a alive successor.
+*/
+void fix_dead_successor() {
+  rpc::client* client;
+  try
+  {
+    // the first node of successor_list failed
+    if (successor_list[1].id != self.id)
+    {
+      client = new rpc::client(successor_list[1].ip, successor_list[1].port);
+      std::vector<Node> new_successor_list = client->call("get_successor_list").as<std::vector<Node>>();
+
+      /*update successor, successor_list, finger_table*/
+      update_finger_table(successor_list[0], successor_list[1]);
+
+      successor = successor_list[1];
+      successor_list[0] = successor_list[1];
+      successor_list[1] = new_successor_list[0];
+      successor_list[2] = new_successor_list[1];
+    }
+    else
+    {
+      // successor == self, so only exit one node
+      initiate_ring();
+    }
+  }
+  catch (std::exception &e)
+  {
+    // the first two node of successor_list failed
+    try
+    {
+      if (successor_list[1].id != self.id)
+      {
+        client = new rpc::client(successor_list[2].ip, successor_list[2].port);
+        std::vector<Node> new_successor_list = client->call("get_successor_list").as<std::vector<Node>>();
+
+        update_finger_table(successor_list[0], successor_list[2]);
+        update_finger_table(successor_list[1], successor_list[2]);
+
+        successor = successor_list[2];
+        successor_list[0] = successor_list[2];
+        successor_list[1] = new_successor_list[0];
+        successor_list[2] = new_successor_list[1];
+      }
+      else
+      {
+        // successor == self, so only exit one node
+        initiate_ring();
+      }
+    }
+    catch (std::exception &e)
+    {
+      // do nothing
+      // successor_list[1] still dead, can find successor_list[2] as alt, but i'm lazy.
+    }
+  }
+}
+
+
+/**
+ * Binding "name" to function on sever which exposed to rpc call
+*/
 void register_rpcs() {
   add_rpc("get_info", &get_info); // Do not modify this line.
 
@@ -382,6 +399,9 @@ void register_rpcs() {
   add_rpc("notify", &notify);
 }
 
+/**
+ * Invoked periodically (every 2s)
+*/
 void register_periodics() {
   // 順序不建議調換
   add_periodic(check_predecessor);

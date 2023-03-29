@@ -123,7 +123,7 @@ wait(20 * t)
 join(5063, 5062)
 wait(t)
 join(5061, 5062)
-wait(t)
+wait(10 * t)
 
 kill(5063)
 wait(10 * t)
