@@ -8,7 +8,7 @@ ids = []
 find_successor_req = 0
 incorrect = 0
 # t = 2
-t = 0.2 # 我寫的chord時間複雜度不夠! 要兩倍的 time 才正確
+t = 0.12 # 我寫的chord時間複雜度不夠! 要兩倍的 time 才正確
 
 def add_id(id):
 	if id not in ids:

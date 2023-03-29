@@ -10,7 +10,7 @@
 
 
 Node self, successor, predecessor;
-static int finger_size = 4; // finger table store 4 entries
+static int finger_size = 5; // finger table store 5 entries
 std::vector<Node> finger_table(finger_size);
 std::vector<Node> successor_list(3);
 
@@ -55,6 +55,7 @@ bool isBetween_inclusive(uint64_t id, uint64_t a, uint64_t b){
 
 // ====== start of the program functions ======
 // todo: 寫一個 function to get finger's id 讓最後一個 finger 繞半圈
+//       
 
 /** Used in stablize()*/
 void change_predecessor(Node n) {
@@ -173,6 +174,11 @@ uint64_t next = 0; // index to refresh
 /**
  * Called periodicly
  * Refresh finger table entry, refresh one entry at one call.
+ * finger[0]  = successor,
+ * finger[-1] = self.id + 2^31 (最後一個 finger 繞半圈 = 2^(32-1))
+ * finger[-2] = self.id + 2^30
+ * finger[-3] = self.id + 2^29 = finger[2]
+ * finger[-4] = self.id + 2^28 = finger[1] (if finger_size is 5)
 */
 void fix_fingers(){
   try {
@@ -183,7 +189,8 @@ void fix_fingers(){
     if (next == 0){
       finger_table[next] = successor;
     } else {
-      finger_table[next] = find_successor(add_id(self.id, (1ULL << (28+next)) ));
+       uint64_t base = 32 - (finger_size-next);
+      finger_table[next] = find_successor(add_id(self.id, (1ULL << (base)) ));
     }
 
     // std::cout << "fix_fingers: Node " << self.id << "\n";
