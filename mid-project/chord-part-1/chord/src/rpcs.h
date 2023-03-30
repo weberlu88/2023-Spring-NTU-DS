@@ -53,9 +53,7 @@ bool isBetween_inclusive(uint64_t id, uint64_t a, uint64_t b){
   }
 }
 
-// ====== start of the program functions ======
-// todo: 寫一個 function to get finger's id 讓最後一個 finger 繞半圈
-//       
+// ====== start of the program functions ======    
 
 /** Used in stablize()*/
 void change_predecessor(Node n) {
