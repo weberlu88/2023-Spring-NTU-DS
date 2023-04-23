@@ -1,0 +1,9 @@
+Host 140.112.107.43
+  HostName 140.112.107.43
+  User r10725052
+  Port 3389
+
+Host AWSEC2
+  HostName ec2-3-88-145-70.compute-1.amazonaws.com
+  User ec2-user
+  IdentityFile C:\Users\weber\.ssh\ec2-key.pem

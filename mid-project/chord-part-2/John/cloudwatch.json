@@ -1,0 +1,20 @@
+{
+    "agent": {
+        "metrics_collection_interval": 60
+    },
+    "metrics": {
+        "append_dimensions": {
+            "AutoScalingGroupName": "${aws:AutoScalingGroupName}"
+        },
+        "metrics_collected": {
+            "disk": {
+                "measurement": [
+                    "used_percent"
+                ],
+                "resources": [
+                  "*"
+                ]
+            }
+        }
+    }
+}
