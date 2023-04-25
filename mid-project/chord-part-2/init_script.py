@@ -17,8 +17,8 @@ def check_chord_alive(alais_ip:str) -> bool:
     try:
         info = client.call("get_info")
         if info[0] != b'':
-            print("info[0]:", info[0], "type:", type(info[0]))
-            return True     
+            print("check_chord_alive:", info[0], "type:", type(info[0]))
+            return True
     except Exception as e:
         print("chord not-alive at instance:", alais_ip)
     return False
@@ -37,7 +37,7 @@ def create_chord_ring(my_ip):
     client.call("create")
     time.sleep(2)
 
-def restart_chord_node():
+def restart_chord_node(private_ip):
 	# Get list of all processes with name starting with "chord" and kill
 	try:
 		processes = subprocess.check_output(["pgrep", "chord"], universal_newlines=True).split()
@@ -49,9 +49,9 @@ def restart_chord_node():
 	except:
 		print("info: no runnung chord processes.")
 	try:
-		cmd_str = "./chord 127.0.0.1 5057 &"
+		cmd_str = f"/home/ec2-user/chord {private_ip} 5057 &"
 		subprocess.run(cmd_str, shell=True)
-		time.sleep(2)
+		time.sleep(2.1)
 	except:
 		print("info: start nodes error")
 
@@ -77,16 +77,19 @@ for reservation in response['Reservations']:
 print("alias_ip_list:", alias_ip_list)
 
 ''' (2) If other instance found, select a chord node to Join. Else start the chord ring by myself.'''
-restart_chord_node()
+restart_chord_node(private_ip)
 isJoinSucc = False
 
 for alias_ip in alias_ip_list:
     if check_chord_alive(alias_ip):
+        print("Try join a chord ring at:", alias_ip)
         join_chord(private_ip, alias_ip)
         isJoinSucc = True
         print("Join a chord ring at:", alias_ip)
         break
 
 if not isJoinSucc:
+    print("No alias found, try to create chord ring")
     create_chord_ring(private_ip)
     print("Create a new chord ring at:", private_ip)
+print()
