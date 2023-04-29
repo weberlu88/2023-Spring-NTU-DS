@@ -8,20 +8,17 @@ import time
 import subprocess
 import boto3
 
-### The code need to put into /home/ec2-user/files ###
-# you can change it by specify the "dir path" into all upload funciton - simple_upload() and hash_upload()"
 
-# base_path = '/home/ec2-user/part3/'
 file_name = sys.argv[1]
 ip = sys.argv[2]
 file_size = os.path.getsize(file_name) # unit = bytes
-threshold = 1024*1024*100 # 100MB
+threshold = 1024*1024*10 # 10MB
 
 my_ip = subprocess.check_output(["curl", "-s", "http://169.254.169.254/latest/meta-data/local-ipv4"]).decode('utf-8')
 
 def get_ec2_ips(is_including_self=True): # including self ip?
     ec2_ip = []
-    ec2 = boto3.client('ec2', region_name='us-east-1')
+    ec2 = boto3.client('ec2', region_name='ap-southeast-2')
     response = ec2.describe_instances()
 
     for reservation in response['Reservations']:
@@ -68,19 +65,19 @@ def rm_file(file_path):
         print(f"刪除 {file_path} 檔案時發生錯誤：{str(e)}")
     
 
-def record_chunk_file_namelist(file_name):
-    chunk_file_list = []
+# def record_chunk_file_namelist(file_name):
+#     chunk_file_list = []
 
-    if os.path.exists('chunk_file_list.pkl'):
-        with open( 'chunk_file_list.pkl', 'rb') as f: # 先讀取現有的檔案
-            chunk_file_list = pickle.load(f)      
-    if file_name not in chunk_file_list:
-        chunk_file_list.append(file_name) # 加入新的的檔案
+#     if os.path.exists('chunk_file_list.pkl'):
+#         with open( 'chunk_file_list.pkl', 'rb') as f: # 先讀取現有的檔案
+#             chunk_file_list = pickle.load(f)      
+#     if file_name not in chunk_file_list:
+#         chunk_file_list.append(file_name) # 加入新的的檔案
 
-    with open( 'chunk_file_list.pkl', 'wb') as f: 
-        pickle.dump(chunk_file_list, f)
+#     with open( 'chunk_file_list.pkl', 'wb') as f: 
+#         pickle.dump(chunk_file_list, f)
 
-    return chunk_file_list
+#     return chunk_file_list
 
 def simple_upload(file_name, ip): # 參考助教 part2 test_upload.py，不用 hash 找 node，直接傳給指定 IP
     files = {
@@ -100,7 +97,6 @@ def hash_upload(filename, ip): # 參考助教 part2 upload.py
     h = hash(filename)
     print("Hash of {} is {}".format(filename, h))
 
-    node = client.call("create",)
     node = client.call("find_successor", h)
     node_ip = node[0].decode()
 
@@ -111,28 +107,21 @@ def hash_upload(filename, ip): # 參考助教 part2 upload.py
     print("Uploading file to http://{}".format(node_ip))
     response = requests.post('http://{}:5058/upload'.format(node_ip), files=files)
 
+    return node_ip
+
 def new_client(ip, port):
 	return msgpackrpc.Client(msgpackrpc.Address(ip, port))
 
 def hash(str):
 	return int(hashlib.md5(str.encode()).hexdigest(), 16) & ((1 << 32) - 1)
 
-def lb_upload(file_name, file_size):
+def lb_upload(file_name, file_size, ip):
 
-    # record the chunk file name to a list 
-    chunk_file_list = record_chunk_file_namelist(file_name)
-    print("chunk_file_namelist:", chunk_file_list)
+    file_chunk_dict = {} # {"chunk_num": x}
 
-    # 一些參數
-    # file_path = base_path + file_name
-    node_ips = get_node_ips() # like [172.165.0.1, 172.165.0.2, .172.165.0.3]
-    print(node_ips)
-
-    num_chunks = len(node_ips)
-    file_chunk_dict = {}
-
-    # 計算每個切分後的檔案大小
-    chunk_size = file_size // num_chunks
+    # 計算每個切分後的檔案大小, 數量
+    chunk_size = 1024*1024*2 # 2MB # 最多設定 2MB 因為剩餘沒切乾淨可能是 1.9999MB 加起來才不會超過 4 MB
+    num_chunks = file_size // chunk_size
     chunk_sizes = [chunk_size] * num_chunks
 
     # 如果還有剩餘的 bytes，分配到最後一個 chunk
@@ -141,59 +130,50 @@ def lb_upload(file_name, file_size):
 
     print("chunk_sizes:", chunk_sizes)
 
-    # cut_chunk and write to /home/ec2-user/part3/chunk/ # no, 因為 upload 後都會在 /files/ 裡面，不好改位置
+    # cut file to chunk-part-1, chunk-part-2, chunk-part-3...
     with open(file_name, 'rb') as f:
         for i in range(num_chunks):
             # 讀取 chunk_size 個 bytes
             chunk_data = f.read(chunk_sizes[i])
 
             # 確定 chunk 檔案的路徑
-            # chunk_path = base_path + "chunk/" + file_name + "-part-" + str(i)
             chunk_path = file_name + "-part-" + str(i)
 
             # 寫入 chunk 檔案
             with open(chunk_path, 'wb') as chunk_file:
                 chunk_file.write(chunk_data)    
 
-            # 儲存資訊 ip:path
-            file_chunk_dict[node_ips[i]] = chunk_path
-
-    # 儲存資訊 ip:path to /home/ec2-user/part3/pkl/ # no, 因為 upload 後都會在 /files/ 裡面，不好改位置
-    # with open(base_path + "pkl/" + file_name + '.pkl', 'wb') as f:
+    # 儲存資訊 {"chunk_num": x}
+    file_chunk_dict["chunk_num"] = num_chunks
     with open(file_name + '.pkl', 'wb') as f:
         pickle.dump(file_chunk_dict, f)   
 
-    # really upload the data
-    for ip in file_chunk_dict:
+    # 上傳 file chunk
+    upload_info = {}
+    for i in num_chunks:
+        chunk_path = file_name + "-part-" + str(i)
+        node_ip = hash_upload(chunk_path, ip)
+        upload_info[node_ip] = chunk_path
+        time.sleep(3)
 
-        if ip != my_ip:
-            # upload chunk data
-            simple_upload(file_chunk_dict[ip] ,ip)
-            time.sleep(5)
-            # upload the metadata
-            simple_upload('chunk_file_list.pkl', ip) # /home/ec2-user/files/chunk_file_list.pkl
-            time.sleep(5)
-            simple_upload(file_name + '.pkl', ip) # /home/ec2-user/files/<file_name>.pkl
-
-    # locally remove redundant files
-    for ip in file_chunk_dict:
-        if ip != my_ip:
-            rm_file(file_chunk_dict[ip])
+        # 刪除本地端的 file chunk
+        rm_file(chunk_path)
     
-    # rm_file(file_name)
-
-    return file_chunk_dict
+    # 上傳 metadata {"chunk_num": x}
+    hash_upload(file_name + '.pkl', ip)
+    rm_file(file_name + '.pkl') # 刪除本地端的 metadata
+    
+    return upload_info
 
 ### main() ###
 print("File size:", file_size, "Threshold:", threshold)
 if file_size > threshold:
     print("Load balance upload...")
-    upload_record = lb_upload(file_name, file_size) # a directory 
+    upload_record = lb_upload(file_name, file_size, ip) # a directory 
     print("Upload detail:", upload_record)
     
 else:
-    print("Simple upload to:", upload_ip)
     upload_ip = hash_upload(file_name, ip)
+    print("Normal upload to:", upload_ip)
     
-
 
