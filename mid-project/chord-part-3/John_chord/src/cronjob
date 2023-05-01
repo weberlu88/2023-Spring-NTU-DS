@@ -1,0 +1,2 @@
+* * * * * /usr/bin/python3 /home/ec2-user/migrate.py >> /home/ec2-user/migrate_log.txt 2>&1
+* * * * * /usr/bin/python3 /home/ec2-user/replica.py >> /home/ec2-user/replica_log.txt 2>&1

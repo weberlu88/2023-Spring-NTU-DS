@@ -1,0 +1,11 @@
+# ┌───────────── 分鐘   (0 - 59)
+# │ ┌─────────── 小時   (0 - 23)
+# │ │ ┌───────── 日     (1 - 31)
+# │ │ │ ┌─────── 月     (1 - 12)
+# │ │ │ │ ┌───── 星期幾 (0 - 7，0 是週日，6 是週六，7 也是週日)
+# │ │ │ │ │
+# * * * * * /path/to/command
+# “At every minute.”
+
+* * * * * /usr/bin/python3 /home/ec2-user/do_migrate.py >> /home/ec2-user/log_migrate.txt 2>&1
+* * * * * /usr/bin/python3 /home/ec2-user/do_replica.py >> /home/ec2-user/log_replica.txt 2>&1
