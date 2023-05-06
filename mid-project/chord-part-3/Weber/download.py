@@ -24,7 +24,7 @@ def download_function(filename, ip, outfile:str=None) -> None:
 	response = requests.get("http://{}:5058/{}".format(node_ip, filename))
 
 	if outfile:
-		with open(filename, "wb") as f:
+		with open(outfile, "wb") as f:
 			f.write(response.content)
 	else:
 		with open(filename, "wb") as f:

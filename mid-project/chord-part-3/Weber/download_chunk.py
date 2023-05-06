@@ -80,4 +80,4 @@ with open(filename, 'wb') as output_file:
             chunk_data = chunk_file.read()
         # 將 chunk 寫入輸出檔案
         output_file.write(chunk_data)
-print(f'{filename} is downloaded done...\n')
+print(f'{filename} downloaded done...\n')
