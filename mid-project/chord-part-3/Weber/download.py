@@ -31,7 +31,8 @@ def download_function(filename, ip, outfile:str=None) -> None:
 			f.write(response.content)
 	pass
 
-filename = sys.argv[1]
-ip = sys.argv[2]
+if __name__ == '__main()__':
+	filename = sys.argv[1]
+	ip = sys.argv[2]
 
-download_function(filename, ip)
+	download_function(filename, ip)
